@@ -351,7 +351,6 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
     protected void negotiationFailed(final Throwable cause) {
         LOG.debug("Negotiation on channel {} failed", channel, cause);
         channel.close();
-        promise.setFailure(cause);
     }
 
     @Override
