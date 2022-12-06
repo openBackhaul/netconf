@@ -75,7 +75,7 @@ public class DeviceNotificationListenerAdaptor extends AbstractCommonSubscriber<
         final Optional<String> maybeOutput;
         try {
             maybeOutput = formatter().eventData(refSchemaCtx, notification, eventInstant, getLeafNodesOnly(),
-                isSkipNotificationData());
+                isSkipNotificationData(), false);
         } catch (Exception e) {
             LOG.error("Failed to process notification {}", notification, e);
             return;
