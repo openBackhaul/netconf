@@ -10,6 +10,7 @@ package org.opendaylight.netconf.sal.connect.netconf;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
 import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_GET_NODEID;
+import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.toId;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Collections2;
@@ -23,7 +24,6 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -66,7 +66,9 @@ import org.opendaylight.yangtools.rfc8528.model.api.SchemaMountConstants;
 import org.opendaylight.yangtools.yang.common.QName;
 import org.opendaylight.yangtools.yang.data.api.YangInstanceIdentifier;
 import org.opendaylight.yangtools.yang.data.api.YangInstanceIdentifier.NodeIdentifier;
+import org.opendaylight.yangtools.yang.data.api.schema.ContainerNode;
 import org.opendaylight.yangtools.yang.data.impl.schema.Builders;
+import org.opendaylight.yangtools.yang.data.impl.schema.ImmutableNodes;
 import org.opendaylight.yangtools.yang.model.api.EffectiveModelContext;
 import org.opendaylight.yangtools.yang.model.repo.api.EffectiveModelContextFactory;
 import org.opendaylight.yangtools.yang.model.repo.api.MissingSchemaSourceException;
@@ -102,6 +104,9 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
     private final NetconfDeviceSchemasResolver stateSchemasResolver;
     private final NotificationHandler notificationHandler;
     private final boolean reconnectOnSchemasChange;
+    private final String notificationStream;
+    private final boolean isNotificationSubscribe;
+
     private final BaseNetconfSchemas baseSchemas;
 
     @GuardedBy("this")
@@ -112,17 +117,22 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
 
     public NetconfDevice(final SchemaResourcesDTO schemaResourcesDTO, final BaseNetconfSchemas baseSchemas,
             final RemoteDeviceId id, final RemoteDeviceHandler salFacade,
-            final ListeningExecutorService globalProcessingExecutor, final boolean reconnectOnSchemasChange) {
-        this(schemaResourcesDTO, baseSchemas, id, salFacade, globalProcessingExecutor, reconnectOnSchemasChange, null);
+            final ListeningExecutorService globalProcessingExecutor, final boolean reconnectOnSchemasChange,
+            final String notificationStream, final boolean isNotificationSubscribe) {
+        this(schemaResourcesDTO, baseSchemas, id, salFacade, globalProcessingExecutor, reconnectOnSchemasChange, null,
+                notificationStream, isNotificationSubscribe);
     }
 
     public NetconfDevice(final SchemaResourcesDTO schemaResourcesDTO, final BaseNetconfSchemas baseSchemas,
             final RemoteDeviceId id, final RemoteDeviceHandler salFacade,
             final ListeningExecutorService globalProcessingExecutor, final boolean reconnectOnSchemasChange,
-            final DeviceActionFactory deviceActionFactory) {
+            final DeviceActionFactory deviceActionFactory, final String notificationStream,
+            final boolean isNotificationSubscribe) {
         this.baseSchemas = requireNonNull(baseSchemas);
         this.id = id;
         this.reconnectOnSchemasChange = reconnectOnSchemasChange;
+        this.notificationStream = notificationStream;
+        this.isNotificationSubscribe = isNotificationSubscribe;
         this.deviceActionFactory = deviceActionFactory;
         schemaRegistry = schemaResourcesDTO.getSchemaRegistry();
         schemaRepository = schemaResourcesDTO.getSchemaRepository();
@@ -187,9 +197,14 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
         // TODO check whether the model describing create subscription is present in schema
         // Perhaps add a default schema context to support create-subscription if the model was not provided
         // (same as what we do for base netconf operations in transformer)
+
+        ContainerNode createSubscriptionRpcContainer = Builders.containerBuilder()
+                .withNodeIdentifier(toId(NetconfMessageTransformUtil.CREATE_SUBSCRIPTION_RPC_QNAME))
+                .withChild(ImmutableNodes.leafNode(NetconfMessageTransformUtil.STREAM_NAME, this.notificationStream))
+                .build();
         final var rpcResultListenableFuture = deviceRpc.invokeRpc(
                 NetconfMessageTransformUtil.CREATE_SUBSCRIPTION_RPC_QNAME,
-                NetconfMessageTransformUtil.CREATE_SUBSCRIPTION_RPC_CONTENT);
+                createSubscriptionRpcContainer);
 
         Futures.addCallback(rpcResultListenableFuture, new FutureCallback<DOMRpcResult>() {
             @Override
@@ -215,7 +230,8 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
     }
 
     private boolean shouldListenOnSchemaChange(final NetconfSessionPreferences remoteSessionCapabilities) {
-        return remoteSessionCapabilities.isNotificationsSupported() && reconnectOnSchemasChange;
+        return remoteSessionCapabilities.isNotificationsSupported()
+                && (reconnectOnSchemasChange || isNotificationSubscribe);
     }
 
     private synchronized void handleSalInitializationSuccess(final NetconfDeviceSchema deviceSchema,
@@ -418,13 +434,12 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
             // If device supports notifications and does not contain necessary modules, add them automatically
             if (remoteSessionCapabilities.containsNonModuleCapability(
                     XmlNetconfConstants.URN_IETF_PARAMS_NETCONF_CAPABILITY_NOTIFICATION_1_0)) {
-                deviceSources.getRequiredSourcesQName().addAll(
-                        Arrays.asList(
-                                org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.netconf.notification._1._0.rev080714
-                                        .$YangModuleInfoImpl.getInstance().getName(),
-                                org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.yang.types.rev130715
-                                        .$YangModuleInfoImpl.getInstance().getName()
-                        )
+                // FIXME: mutable collection modification!
+                deviceSources.getRequiredSourcesQName().addAll(List.of(
+                    org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.netconf.notification._1._0.rev080714
+                        .$YangModuleInfoImpl.getInstance().getName(),
+                    org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.yang.types.rev130715
+                        .$YangModuleInfoImpl.getInstance().getName())
                 );
             }
 
