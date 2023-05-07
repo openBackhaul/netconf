@@ -22,6 +22,8 @@ import org.opendaylight.yang.gen.v1.urn.opendaylight.netconf.node.topology.rev15
 public class NetconfDeviceBuilder {
 
     private boolean reconnectOnSchemasChange;
+    private String notificationStream;
+    private boolean isNotificationSubscribe;
     private NetconfDevice.SchemaResourcesDTO schemaResourcesDTO;
     private RemoteDeviceId id;
     private RemoteDeviceHandler<NetconfSessionPreferences> salFacade;
@@ -85,11 +87,21 @@ public class NetconfDeviceBuilder {
         return this;
     }
 
+    public NetconfDeviceBuilder setNotificationStream(String notificationStream) {
+        this.notificationStream = notificationStream;
+        return this;
+    }
+
+    public NetconfDeviceBuilder setNotificationSubscribe(boolean notificationSubscribe) {
+        this.isNotificationSubscribe = notificationSubscribe;
+        return this;
+    }
+
     public NetconfDevice build() {
         validation();
         return new NetconfDevice(this.schemaResourcesDTO, this.baseSchemas, this.id, this.salFacade,
             this.globalProcessingExecutor, this.reconnectOnSchemasChange, this.deviceActionFactory, this.node,
-            this.eventExecutor, this.nodeOptional);
+            this.eventExecutor, this.nodeOptional, this.notificationStream, this.isNotificationSubscribe);
     }
 
     private void validation() {
