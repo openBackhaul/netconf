@@ -25,6 +25,19 @@ module netconf-node-optional {
                 description "Time for reconnection - in units milliseconds. Default 5000 ms.";
             }
         }
+        container notification {
+                    description "";
+                    leaf subscribe {
+                        type boolean;
+                        default false;
+                        description "Start device notification";
+                    }
+                    leaf stream-name {
+                        type string;
+                        default "NETCONF";
+                        description "Device notification stream name";
+                    }
+                }
     }
 
     container netconf-node-fields-optional {
@@ -60,6 +73,7 @@ module netconf-node-optional {
             }
         }
     }
+
 
     augment "/nt:network-topology/nt:topology/nt:node/" {
         when "../../nt:topology-types/topology-netconf";
