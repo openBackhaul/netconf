@@ -52,7 +52,7 @@ final class NetconfSessionPromise<S extends NetconfSession> extends DefaultPromi
             return;
         }
 
-        LOG.debug("Promise {} attempting connect for {}ms", this, timeout);
+        LOG.info("Promise {} attempting connect for {}ms", this, timeout);
 
         final ChannelFuture connectFuture;
         try {
@@ -90,7 +90,7 @@ final class NetconfSessionPromise<S extends NetconfSession> extends DefaultPromi
 
     // Triggered when a connection attempt is resolved.
     private synchronized void channelConnectComplete(final ChannelFuture cf) {
-        LOG.debug("Promise {} connection resolved", this);
+        LOG.info("Promise {} connection resolved", this);
         verify(pending == cf, "Completed channel future %s while pending %s", cf, pending);
 
         /*
@@ -104,18 +104,18 @@ final class NetconfSessionPromise<S extends NetconfSession> extends DefaultPromi
          */
         if (isCancelled()) {
             if (cf.isSuccess()) {
-                LOG.debug("Closing channel for cancelled promise {}", this);
+                LOG.info("Closing channel for cancelled promise {}", this);
                 cf.channel().close();
             }
             return;
         }
 
         if (cf.isSuccess()) {
-            LOG.debug("Promise {} connection successful", this);
+            LOG.info("Promise {} connection successful", this);
             return;
         }
 
-        LOG.debug("Attempt to connect to {} failed", address, cf.cause());
+        LOG.info("Attempt to connect to {} failed", address, cf.cause());
 
         final Future<Void> rf = strategy.scheduleReconnect(cf.cause());
         pending = rf;
@@ -124,7 +124,7 @@ final class NetconfSessionPromise<S extends NetconfSession> extends DefaultPromi
 
     // Triggered when a connection attempt is to be made.
     private synchronized void reconnectFutureComplete(final Future<?> sf) {
-        LOG.debug("Promise {} strategy triggered reconnect", this);
+        LOG.info("Promise {} strategy triggered reconnect", this);
         verify(pending == sf, "Completed strategy future %s while pending %s", sf, pending);
 
         /*
