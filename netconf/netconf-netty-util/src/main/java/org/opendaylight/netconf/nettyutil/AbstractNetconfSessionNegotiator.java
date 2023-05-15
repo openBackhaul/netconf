@@ -74,7 +74,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
         } else {
             DEFAULT_MAXIMUM_INCOMING_CHUNK_SIZE = propValue;
         }
-        LOG.debug("Default maximum incoming NETCONF chunk size is {} bytes", DEFAULT_MAXIMUM_INCOMING_CHUNK_SIZE);
+        LOG.info("Default maximum incoming NETCONF chunk size is {} bytes", DEFAULT_MAXIMUM_INCOMING_CHUNK_SIZE);
     }
 
     private final @NonNull NetconfHelloMessage localHello;
@@ -119,13 +119,13 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
 
     protected final void startNegotiation() {
         if (ifNegotiatedAlready()) {
-            LOG.debug("Negotiation on channel {} already started", channel);
+            LOG.info("Negotiation on channel {} already started", channel);
         } else {
             final var sslHandler = getSslHandler(channel);
             if (sslHandler != null) {
                 sslHandler.handshakeFuture().addListener(future -> {
                     checkState(future.isSuccess(), "Ssl handshake was not successful");
-                    LOG.debug("Ssl handshake complete");
+                    LOG.info("Ssl handshake complete");
                     start();
                 });
             } else {
@@ -148,7 +148,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
     }
 
     private void start() {
-        LOG.debug("Sending negotiation proposal {} on channel {}", localHello, channel);
+        LOG.info("Sending negotiation proposal {} on channel {}", localHello, channel);
 
         // Send the message out, but to not run listeners just yet, as we have some more state transitions to go through
         final var helloFuture = channel.writeAndFlush(localHello);
@@ -156,7 +156,8 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
         // Quick check: if the future has already failed we call it quits before negotiation even started
         final var helloCause = helloFuture.cause();
         if (helloCause != null) {
-            LOG.warn("Failed to send negotiation proposal on channel {}", channel, helloCause);
+            LOG.info("Hello on channel {} failed with {} error", channel, helloCause);
+            LOG.info("Failed to send negotiation proposal on channel {}", channel, helloCause);
             failAndClose();
             return;
         }
@@ -165,7 +166,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
         final class ExceptionHandlingInboundChannelHandler extends ChannelInboundHandlerAdapter {
             @Override
             public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) {
-                LOG.warn("An exception occurred during negotiation with {} on channel {}",
+                LOG.info("An exception occurred during negotiation with {} on channel {}",
                         channel.remoteAddress(), channel, cause);
                 // FIXME: this is quite suspect as it is competing with timeoutExpired() without synchronization
                 cancelTimeout();
@@ -188,7 +189,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
                 connectionTimeoutMillis, TimeUnit.MILLISECONDS);
         }
 
-        LOG.debug("Session negotiation started on channel {}", channel);
+        LOG.info("Session negotiation started on channel {}", channel);
 
         // State transition completed, now run any additional processing
         helloFuture.addListener(this::onHelloWriteComplete);
@@ -212,13 +213,13 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
         timeoutTask = null;
 
         if (state != State.ESTABLISHED) {
-            LOG.debug("Connection timeout after {}ms, session backed by channel {} is in state {}",
+            LOG.info("Connection timeout after {}ms, session backed by channel {} is in state {}",
                 connectionTimeoutMillis, channel, state);
 
             // Do not fail negotiation if promise is done or canceled
             // It would result in setting result of the promise second time and that throws exception
             if (!promise.isDone() && !promise.isCancelled()) {
-                LOG.warn("Netconf session backed by channel {} was not established after {}", channel,
+                LOG.info("Netconf session backed by channel {} was not established after {}", channel,
                     connectionTimeoutMillis);
                 failAndClose();
             }
@@ -235,9 +236,9 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
     private void onChannelClosed(final Future<?> future) {
         final var cause = future.cause();
         if (cause != null) {
-            LOG.warn("Channel {} closed: fail", channel, cause);
+            LOG.info("Channel {} closed: fail", channel, cause);
         } else {
-            LOG.debug("Channel {} closed: success", channel);
+            LOG.info("Channel {} closed: success", channel);
         }
     }
 
@@ -313,7 +314,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
 
     @Holding("this")
     private void lockedChangeState(final State newState) {
-        LOG.debug("Changing state from : {} to : {} for channel: {}", state, newState, channel);
+        LOG.info("Changing state from : {} to : {} for channel: {}", state, newState, channel);
         checkState(isStateChangePermitted(state, newState),
                 "Cannot change state from %s to %s for channel %s", state, newState, channel);
         this.state = newState;
@@ -343,13 +344,13 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
     }
 
     protected final void negotiationSuccessful(final S session) {
-        LOG.debug("Negotiation on channel {} successful with session {}", channel, session);
+        LOG.info("Negotiation on channel {} successful with session {}", channel, session);
         channel.pipeline().replace(this, "session", session);
         promise.setSuccess(session);
     }
 
     protected void negotiationFailed(final Throwable cause) {
-        LOG.debug("Negotiation on channel {} failed", channel, cause);
+        LOG.info("Negotiation on channel {} failed", channel, cause);
         channel.close();
         promise.setFailure(cause);
     }
@@ -357,7 +358,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
     @Override
     @SuppressWarnings("checkstyle:illegalCatch")
     public final void channelActive(final ChannelHandlerContext ctx) {
-        LOG.debug("Starting session negotiation on channel {}", channel);
+        LOG.info("Starting session negotiation on channel {}", channel);
         try {
             startNegotiation();
         } catch (final Exception e) {
@@ -378,7 +379,7 @@ public abstract class AbstractNetconfSessionNegotiator<S extends AbstractNetconf
         try {
             handleMessage((NetconfHelloMessage) msg);
         } catch (final Exception e) {
-            LOG.debug("Unexpected error while handling negotiation message {} on channel {}", msg, channel, e);
+            LOG.info("Unexpected error while handling negotiation message {} on channel {}", msg, channel, e);
             negotiationFailed(e);
         }
     }

@@ -155,7 +155,7 @@ public class NetconfDeviceCommunicator implements NetconfClientSessionListener, 
 
         connectFuture.addListener(future -> {
             if (!future.isSuccess() && !future.isCancelled()) {
-                LOG.debug("{}: Connection failed", id, future.cause());
+                LOG.info("{}: Connection failed", id, future.cause());
                 remoteDevice.onRemoteSessionFailed(future.cause());
                 if (!firstConnectionFuture.isDone()) {
                     firstConnectionFuture.setException(future.cause());

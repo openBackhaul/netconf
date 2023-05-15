@@ -81,7 +81,7 @@ public final class TimedReconnectStrategy implements ReconnectStrategy {
 
     @Override
     public synchronized Future<Void> scheduleReconnect(final Throwable cause) {
-        LOG.debug("Connection attempt failed", cause);
+        LOG.info("Connection attempt failed", cause);
 
         // Check if a reconnect attempt is scheduled
         checkState(!this.scheduled);
@@ -109,7 +109,7 @@ public final class TimedReconnectStrategy implements ReconnectStrategy {
 
         // Cap the sleep time to maxSleep
         if (this.maxSleep != null && this.lastSleep > this.maxSleep) {
-            LOG.debug("Capped sleep time from {} to {}", this.lastSleep, this.maxSleep);
+            LOG.info("Capped sleep time from {} to {}", this.lastSleep, this.maxSleep);
             this.lastSleep = this.maxSleep;
         }
 
@@ -120,7 +120,7 @@ public final class TimedReconnectStrategy implements ReconnectStrategy {
             return this.executor.newFailedFuture(new TimeoutException("Next reconnect would happen after deadline"));
         }
 
-        LOG.debug("Connection attempt {} sleeping for {} milliseconds", this.attempts, this.lastSleep);
+        LOG.info("Connection attempt {} sleeping for {} milliseconds", this.attempts, this.lastSleep);
 
         // If we are not sleeping at all, return an already-succeeded future
         if (this.lastSleep == 0) {
