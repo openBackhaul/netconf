@@ -37,7 +37,7 @@ public class NettyAwareChannelSubsystem extends ChannelSubsystem {
         if (!isClosing()) {
             // TODO: consider using context's allocator for heap buffer here
             ctx.fireChannelRead(Unpooled.copiedBuffer(data, off, (int) len));
-            getLocalWindow().check();
+            adjustWindow(len);
         }
     }
 
@@ -46,8 +46,12 @@ public class NettyAwareChannelSubsystem extends ChannelSubsystem {
         // If we're already closing, ignore incoming data
         if (!isClosing()) {
             LOG.debug("Discarding {} bytes of extended data", len);
-            getLocalWindow().check();
+            adjustWindow(len);
         }
+    }
+
+    private void adjustWindow(final long len) throws IOException {
+        getLocalWindow().consumeAndCheck(len);
     }
 
     @Override
