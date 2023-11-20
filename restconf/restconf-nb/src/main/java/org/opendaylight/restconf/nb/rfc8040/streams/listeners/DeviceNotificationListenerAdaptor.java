@@ -68,16 +68,10 @@ public final class DeviceNotificationListenerAdaptor extends AbstractNotificatio
     public synchronized void listen(final DOMNotificationService notificationService, final Set<Absolute> paths) {
         if (!isListening()) {
             setRegistration(notificationService.registerNotificationListener(this, paths));
-            reg = mountPointService.registerProvisionListener(this);
+            reg = reg == null ? mountPointService.registerProvisionListener(this) : reg;
         }
     }
 
-    private synchronized void resetListenerRegistration() {
-        if (reg != null) {
-            reg.close();
-            reg = null;
-        }
-    }
 
     @Override
     EffectiveModelContext effectiveModel() {
@@ -149,7 +143,7 @@ public final class DeviceNotificationListenerAdaptor extends AbstractNotificatio
         final Set<Absolute> absolutes = notificationDefinitions.stream()
                 .map(notificationDefinition -> Absolute.of(notificationDefinition.getQName()))
                 .collect(Collectors.toUnmodifiableSet());
-        resetListenerRegistration();
+        //resetListenerRegistration();
         resetRegistration();
         listen(domNotificationService, absolutes);
         getSubscribers().forEach(subscriber -> {
