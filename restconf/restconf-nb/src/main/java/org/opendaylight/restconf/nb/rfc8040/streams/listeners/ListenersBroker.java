@@ -162,6 +162,28 @@ public final class ListenersBroker {
     }
 
     /**
+     * Remove stream name and path if such listener
+     * hasn't been created yet.
+     *
+     * @param streamName Stream name.
+     */
+    public void removeDataChangeListener(final String streamName) {
+        requireNonNull(streamName);
+
+        final long stamp = dataChangeListenersLock.writeLock();
+        try {
+            dataChangeListeners.remove(streamName).close();
+        } catch (final InterruptedException | ExecutionException exception) {
+            LOG.error("Data-change listener {} cannot be closed.", streamName, exception);
+            throw new IllegalStateException(String.format(
+                    "Data-change listener %s cannot be closed.",
+                    streamName), exception);
+        } finally {
+            dataChangeListenersLock.unlockWrite(stamp);
+        }
+    }
+
+    /**
      * Creates new {@link NotificationDefinition} listener using input stream name and schema path
      * if such listener haven't been created yet.
      *
@@ -374,9 +396,7 @@ public final class ListenersBroker {
      */
     void removeAndCloseListener(final BaseListenerInterface listener) {
         requireNonNull(listener);
-        if (listener instanceof ListenerAdapter) {
-            removeAndCloseDataChangeListener((ListenerAdapter) listener);
-        } else if (listener instanceof NotificationListenerAdapter) {
+        if (listener instanceof NotificationListenerAdapter) {
             removeAndCloseNotificationListener((NotificationListenerAdapter) listener);
         }
     }

@@ -123,6 +123,16 @@ public final class CreateStreamUtil {
      */
     static DOMRpcResult createDataChangeNotifiStream(final NormalizedNodePayload payload,
             final EffectiveModelContext refSchemaCtx) {
+        return createOrDeleteDataChangeNotifiStream(payload, refSchemaCtx, true);
+    }
+
+    static DOMRpcResult removeDataChangeNotifiStream(final NormalizedNodePayload payload,
+            final EffectiveModelContext refSchemaCtx) {
+        return createOrDeleteDataChangeNotifiStream(payload, refSchemaCtx, false);
+    }
+
+    private static DOMRpcResult createOrDeleteDataChangeNotifiStream(final NormalizedNodePayload payload,
+            final EffectiveModelContext refSchemaCtx, Boolean isAdded) {
         // parsing out of container with settings and path
         final ContainerNode data = (ContainerNode) requireNonNull(payload).getData();
         final QName qname = payload.getInstanceIdentifierContext().getSchemaNode().getQName();
@@ -135,16 +145,18 @@ public final class CreateStreamUtil {
         if (outputType.equals(NotificationOutputType.JSON)) {
             streamNameBuilder.append('/').append(outputType.getName());
         }
-        final String streamName = streamNameBuilder.toString();
+        String streamName = streamNameBuilder.toString();
+        if (isAdded) {
+            ListenersBroker.getInstance().registerDataChangeListener(path, streamName, outputType);
+        } else {
+            ListenersBroker.getInstance().removeDataChangeListener(streamName);
+            streamName = "";
+        }
 
-        // registration of the listener
-        ListenersBroker.getInstance().registerDataChangeListener(path, streamName, outputType);
-
-        // building of output
         return new DefaultDOMRpcResult(Builders.containerBuilder()
-            .withNodeIdentifier(SAL_REMOTE_OUTPUT_NODEID)
-            .withChild(ImmutableNodes.leafNode(STREAM_NAME_NODEID, streamName))
-            .build());
+                .withNodeIdentifier(SAL_REMOTE_OUTPUT_NODEID)
+                .withChild(ImmutableNodes.leafNode(STREAM_NAME_NODEID, streamName))
+                .build());
     }
 
     /**
