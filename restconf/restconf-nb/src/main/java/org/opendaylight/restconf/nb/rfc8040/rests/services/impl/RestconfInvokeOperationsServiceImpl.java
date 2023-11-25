@@ -93,8 +93,17 @@ public class RestconfInvokeOperationsServiceImpl implements RestconfInvokeOperat
             //        except ... we check 'identifier' for .contains() instead of exact RPC name!
             if (SAL_REMOTE_NAMESPACE.equals(rpcName.getModule())) {
                 if (identifier.contains("create-data-change-event-subscription")) {
-                    future = Futures.immediateFuture(
-                        CreateStreamUtil.createDataChangeNotifiStream(payload, schemaContext));
+                    final String notificaionType =
+                            uriInfo.getQueryParameters().getFirst("isRemove");
+                    if (notificaionType != null && notificaionType.equals("true")) {
+                        future =
+                                Futures.immediateFuture(
+                                        CreateStreamUtil.removeDataChangeNotifiStream(payload, schemaContext));
+                    } else {
+                        future =
+                                Futures.immediateFuture(
+                                        CreateStreamUtil.createDataChangeNotifiStream(payload, schemaContext));
+                    }
                 } else {
                     future = Futures.immediateFailedFuture(new RestconfDocumentedException("Unsupported operation",
                         ErrorType.RPC, ErrorTag.OPERATION_NOT_SUPPORTED));
