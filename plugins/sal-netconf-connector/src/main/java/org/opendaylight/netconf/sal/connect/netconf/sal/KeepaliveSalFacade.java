@@ -352,8 +352,8 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
             // No matter what response we got,
             // rpc-reply or rpc-error, we got it from device so the netconf session is OK.
             LOG.error("{}: RequestTimeoutTask.onSuccess, UserRPC response received", id);
-            userFuture.set(result);
             enableKeepalive();
+            userFuture.set(result);
         }
 
         @Override
