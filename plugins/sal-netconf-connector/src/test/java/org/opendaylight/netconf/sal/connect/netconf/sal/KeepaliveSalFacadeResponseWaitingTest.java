@@ -13,7 +13,9 @@ import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_COMMIT_QNAME;
+import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_DISCARD_CHANGES_QNAME;
 import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_GET_CONFIG_QNAME;
+import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_GET_QNAME;
 import static org.opendaylight.netconf.sal.connect.netconf.util.NetconfMessageTransformUtil.NETCONF_UNLOCK_QNAME;
 
 import com.google.common.util.concurrent.FutureCallback;
@@ -106,11 +108,12 @@ public class KeepaliveSalFacadeResponseWaitingTest {
         // Verify there was only one KeepaliveTask scheduled (next KeepaliveTask would be scheduled if general RPC
         // result was received).
         Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertTrue(executorService.keepaliveTasks.get(0).isDone());
     }
 
     /**
      * Not scheduling additional keepalive rpc test while the response is processing.
-     * Key point is that RPC unlock is sent in callback of RPC commit.
+     * RPC unlock is sent in callback of RPC commit.
      */
     @Test
     public void testKeepaliveSalWithRpcCommitAndRpcUnlock() {
@@ -139,6 +142,126 @@ public class KeepaliveSalFacadeResponseWaitingTest {
 
         // RPC executions completed before KeepaliveTask run so verify there was only one keepalive task scheduled.
         Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertFalse(executorService.keepaliveTasks.get(0).isDone());
+    }
+
+    /**
+     * Not scheduling additional keepalive rpc test while the response is processing.
+     * RPC discard-changes and RPC unlock are sent asynchronously in callback of RPC commit.
+     */
+    @Test
+    public void testKeepaliveSalWithRpcCommitErrorRpcDiscardChangesRpcUnlock() {
+        // These settable future objects will be set manually to simulate RPC result.
+        final SettableFuture<DOMRpcResult> commitSettableFuture = SettableFuture.create();
+        doReturn(commitSettableFuture).when(deviceRpc).invokeRpc(NETCONF_COMMIT_QNAME, null);
+        final SettableFuture<DOMRpcResult> discardChangesSettableFuture = SettableFuture.create();
+        doReturn(discardChangesSettableFuture).when(deviceRpc).invokeRpc(NETCONF_DISCARD_CHANGES_QNAME, null);
+        final SettableFuture<DOMRpcResult> unlockSettableFuture = SettableFuture.create();
+        doReturn(unlockSettableFuture).when(deviceRpc).invokeRpc(NETCONF_UNLOCK_QNAME, null);
+
+        // Schedule KeepaliveTask to run in 2sec.
+        keepaliveSalFacade.onDeviceConnected(null, null, new RemoteDeviceServices(deviceRpc, null));
+
+        // Invoke RPC commit on simulated local facade, and it adds callback which invokes RPC discard-changes and RPC
+        // unlock on RPC commit error result.
+        underlyingSalFacade.performCommitWithError();
+
+        // Wait 0.5sec and verify RPC commit is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_COMMIT_QNAME, null);
+        // Set RPC commit result, and it calls callback invoking RPC discard-changes and RPC unlock
+        commitSettableFuture.set(new DefaultDOMRpcResult());
+
+        // Wait 0.5sec and verify RPC discard-changes is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_DISCARD_CHANGES_QNAME, null);
+        // Wait 0.5sec and verify RPC unlock is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_UNLOCK_QNAME, null);
+        // Set RPC discard-changes result.
+        discardChangesSettableFuture.set(new DefaultDOMRpcResult());
+        // Set RPC unlock result.
+        unlockSettableFuture.set(new DefaultDOMRpcResult());
+
+        // RPC executions completed before KeepaliveTask run so verify there was only one keepalive task scheduled.
+        Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertFalse(executorService.keepaliveTasks.get(0).isDone());
+    }
+
+    /**
+     * Not scheduling additional keepalive rpc test while the response is processing.
+     * RPC get and RPC get-config are sent in parallel.
+     */
+    @Test
+    public void testKeepaliveSalWithParallelRpcGetRpcGetConfig() {
+        // These settable future objects will be set manually to simulate RPC result.
+        final SettableFuture<DOMRpcResult> getSettableFuture = SettableFuture.create();
+        doReturn(getSettableFuture).when(deviceRpc).invokeRpc(NETCONF_GET_QNAME, null);
+        final SettableFuture<DOMRpcResult> getConfigSettableFuture = SettableFuture.create();
+        doReturn(getConfigSettableFuture).when(deviceRpc).invokeRpc(NETCONF_GET_CONFIG_QNAME, null);
+
+        // Schedule KeepaliveTask to run in 2sec.
+        keepaliveSalFacade.onDeviceConnected(null, null, new RemoteDeviceServices(deviceRpc, null));
+
+        // Invoke RPC get and RPC get-config on simulated local facade.
+        underlyingSalFacade.invokeGetRpc();
+        underlyingSalFacade.invokeGetConfigRpc();
+
+        // Wait 0.5sec and verify RPC get is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_GET_QNAME, null);
+        // Wait 0.5sec and verify RPC get-config is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_GET_CONFIG_QNAME, null);
+
+        // Set RPC get result.
+        getSettableFuture.set(new DefaultDOMRpcResult());
+        // Set RPC get-config result.
+        getConfigSettableFuture.set(new DefaultDOMRpcResult());
+
+        // RPC executions completed before KeepaliveTask run so verify there was only one keepalive task scheduled.
+        Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertFalse(executorService.keepaliveTasks.get(0).isDone());
+    }
+
+    /**
+     * Scheduling another keepalive rpc test after all responses are processed.
+     * RPC get and RPC get-config are sent in parallel, and it takes a while to receive reply.
+     */
+    @Test
+    public void testKeepaliveSalWithParallelRpcGetRpcGetConfigAndLongerWaitForReply() {
+        // These settable future objects will be set manually to simulate RPC result.
+        final SettableFuture<DOMRpcResult> getSettableFuture = SettableFuture.create();
+        doReturn(getSettableFuture).when(deviceRpc).invokeRpc(NETCONF_GET_QNAME, null);
+        final SettableFuture<DOMRpcResult> getConfigSettableFuture = SettableFuture.create();
+        doReturn(getConfigSettableFuture).when(deviceRpc).invokeRpc(NETCONF_GET_CONFIG_QNAME, null);
+
+        // Schedule KeepaliveTask to run in 2sec.
+        keepaliveSalFacade.onDeviceConnected(null, null, new RemoteDeviceServices(deviceRpc, null));
+
+        // Invoke RPC get and RPC get-config on simulated local facade.
+        underlyingSalFacade.invokeGetRpc();
+        underlyingSalFacade.invokeGetConfigRpc();
+
+        // Wait 0.5sec and verify RPC get is invoked.
+        verify(deviceRpc, after(500).times(1)).invokeRpc(NETCONF_GET_QNAME, null);
+        // Wait 5sec and verify RPC get-config is invoked.
+        verify(deviceRpc, after(5000).times(1)).invokeRpc(NETCONF_GET_CONFIG_QNAME, null);
+
+        // After 5.5sec (keepalive is 2sec) we should see that the KeepaliveTask is done (no keepalive is sent)
+        // and no other KeepaliveTask is scheduled because we are waiting for RPC get, get-config replies
+        Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertTrue(executorService.keepaliveTasks.get(0).isDone());
+
+        // Set RPC get result.
+        getSettableFuture.set(new DefaultDOMRpcResult());
+        // RPC reply for RPC get is received, but it should not schedule another KeepaliveTask because we are still
+        // waiting for RPC get-config reply.
+        Assert.assertEquals(1, executorService.keepaliveTasks.size());
+        Assert.assertTrue(executorService.keepaliveTasks.get(0).isDone());
+
+        // Set RPC get-config result.
+        getConfigSettableFuture.set(new DefaultDOMRpcResult());
+        // RPC reply for RPC get-config is received, and it should schedule another KeepaliveTask because no other
+        // RPC replies are expected.
+        Assert.assertEquals(2, executorService.keepaliveTasks.size());
+        Assert.assertTrue(executorService.keepaliveTasks.get(0).isDone());
+        Assert.assertFalse(executorService.keepaliveTasks.get(1).isDone());
     }
 
     private static final class LocalNetconfSalFacade implements RemoteDeviceHandler {
@@ -197,11 +320,47 @@ public class KeepaliveSalFacadeResponseWaitingTest {
                 }, MoreExecutors.directExecutor());
             }
         }
+
+        /**
+         * This is simplified version of {@link WriteCandidateTx#performCommit()} but the key point
+         * is that RPC discard-changes and RPC unlock are invoked asynchronously in callback of RPC commit.
+         */
+        public void performCommitWithError() {
+            final var local = rpcs;
+            if (local != null) {
+                final var commitResult = local.invokeRpc(NETCONF_COMMIT_QNAME, null);
+                Futures.addCallback(commitResult, new FutureCallback<DOMRpcResult>() {
+                    @Override
+                    public void onSuccess(DOMRpcResult domRpcResult) {
+                        local.invokeRpc(NETCONF_DISCARD_CHANGES_QNAME, null);
+                        local.invokeRpc(NETCONF_UNLOCK_QNAME, null);
+                    }
+
+                    @Override
+                    public void onFailure(Throwable throwable) {
+                    }
+                }, MoreExecutors.directExecutor());
+            }
+        }
+
+        public void invokeGetRpc() {
+            final var local = rpcs;
+            if (local != null) {
+                local.invokeRpc(NETCONF_GET_QNAME, null);
+            }
+        }
+
+        public void invokeGetConfigRpc() {
+            final var local = rpcs;
+            if (local != null) {
+                local.invokeRpc(NETCONF_GET_CONFIG_QNAME, null);
+            }
+        }
     }
 
     private static final class ScheduledExecutorServiceWrapper extends ScheduledThreadPoolExecutor {
 
-        public List<Runnable> keepaliveTasks = new CopyOnWriteArrayList<>();
+        public List<ScheduledFuture<?>> keepaliveTasks = new CopyOnWriteArrayList<>();
 
         ScheduledExecutorServiceWrapper(int corePoolSize) {
             super(corePoolSize);
@@ -209,10 +368,11 @@ public class KeepaliveSalFacadeResponseWaitingTest {
 
         @Override
         public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            var task = super.schedule(command, delay, unit);
             if (command instanceof KeepaliveSalFacade.KeepaliveTask) {
-                this.keepaliveTasks.add(command);
+                this.keepaliveTasks.add(task);
             }
-            return super.schedule(command, delay, unit);
+            return task;
         }
     }
 }
