@@ -125,6 +125,7 @@ public class RemoteDeviceConnectorImpl implements RemoteDeviceConnector {
     public void stopRemoteDeviceConnection() {
         if (deviceCommunicatorDTO != null) {
             try {
+                LOG.info("{}: Stopping remote device connection", remoteDeviceId);
                 deviceCommunicatorDTO.close();
             } catch (final Exception e) {
                 LOG.error("{}: Error at closing device communicator.", remoteDeviceId, e);

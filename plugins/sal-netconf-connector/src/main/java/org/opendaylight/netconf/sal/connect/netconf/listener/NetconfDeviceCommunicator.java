@@ -97,7 +97,7 @@ public class NetconfDeviceCommunicator implements NetconfClientSessionListener, 
     public void onSessionUp(final NetconfClientSession session) {
         sessionLock.lock();
         try {
-            LOG.debug("{}: Session established", id);
+            LOG.info("{}: Session established", id);
             currentSession = session;
 
             var netconfSessionPreferences = NetconfSessionPreferences.fromNetconfSession(session);
@@ -124,7 +124,7 @@ public class NetconfDeviceCommunicator implements NetconfClientSessionListener, 
 
         // FIXME: right, except ... this does not include the device schema setup, so is it really useful?
         if (!firstConnectionFuture.set(Empty.value())) {
-            LOG.trace("{}: First connection already completed", id);
+            LOG.info("{}: First connection already completed", id);
         }
     }
 
@@ -154,8 +154,10 @@ public class NetconfDeviceCommunicator implements NetconfClientSessionListener, 
         }
 
         connectFuture.addListener(future -> {
+            LOG.info("{}: connectFuture: future.isSuccess()={} future.isCancelled()={}", id, future.isSuccess(),
+                    future.isCancelled());
             if (!future.isSuccess() && !future.isCancelled()) {
-                LOG.debug("{}: Connection failed", id, future.cause());
+                LOG.info("{}: Connection failed", id, future.cause());
                 remoteDevice.onRemoteSessionFailed(future.cause());
                 if (!firstConnectionFuture.isDone()) {
                     firstConnectionFuture.setException(future.cause());
@@ -180,6 +182,7 @@ public class NetconfDeviceCommunicator implements NetconfClientSessionListener, 
         final List<UncancellableFuture<RpcResult<NetconfMessage>>> futuresToCancel = new ArrayList<>();
         sessionLock.lock();
         try {
+            LOG.info("{}: tearDown reason={} currentSession={}", id, reason, currentSession);
             if (currentSession != null) {
                 currentSession = null;
                 /*

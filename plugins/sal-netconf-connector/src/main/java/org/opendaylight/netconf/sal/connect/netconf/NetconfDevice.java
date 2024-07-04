@@ -153,6 +153,7 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
         // Yang models are being downloaded in this method and it would cause a
         // deadlock if we used the netty thread
         // http://netty.io/wiki/thread-model.html
+        LOG.info("{}: onRemoteSessionUp", id);
         setConnected(true);
         LOG.debug("{}: Session to remote device established with {}", id, remoteSessionCapabilities);
 
@@ -324,6 +325,7 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
 
     @Override
     public void onRemoteSessionDown() {
+        LOG.info("{}: onRemoteSessionDown", id);
         setConnected(false);
         notificationHandler.onRemoteSchemaDown();
 
@@ -335,6 +337,7 @@ public class NetconfDevice implements RemoteDevice<NetconfDeviceCommunicator> {
 
     @Override
     public void onRemoteSessionFailed(final Throwable throwable) {
+        LOG.info("{}: onRemoteSessionFailed", id, throwable);
         setConnected(false);
         salFacade.onDeviceFailed(throwable);
     }

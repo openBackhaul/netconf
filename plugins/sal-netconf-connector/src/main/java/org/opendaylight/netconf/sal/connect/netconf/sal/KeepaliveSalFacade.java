@@ -149,7 +149,7 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
         final var localTask = task;
         if (localTask != null) {
             LOG.debug("{}: Netconf session initiated, starting keepalives", id);
-            LOG.trace("{}: Scheduling keepalives every {}s", id, keepaliveDelaySeconds);
+            LOG.info("{}: Scheduling keepalives every {}s", id, keepaliveDelaySeconds);
             // schedule first KeepaliveTask and do not decrement suppressedCounter at the same time
             localTask.reschedule();
         }
@@ -157,12 +157,14 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
     @Override
     public void onDeviceDisconnected() {
+        LOG.info("{}: Netconf session disconnected", id);
         stopKeepalives();
         salFacade.onDeviceDisconnected();
     }
 
     @Override
     public void onDeviceFailed(final Throwable throwable) {
+        LOG.info("{}: Netconf session failed", id, throwable);
         stopKeepalives();
         salFacade.onDeviceFailed(throwable);
     }
@@ -178,6 +180,7 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
     @Override
     public void close() {
+        LOG.info("{}: Netconf session closing", id);
         stopKeepalives();
         salFacade.close();
     }
