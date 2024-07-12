@@ -46,7 +46,7 @@ public final class DeviceNotificationListenerAdaptor extends AbstractNotificatio
         implements DOMMountPointListener {
     private static final Logger LOG = LoggerFactory.getLogger(DeviceNotificationListenerAdaptor.class);
 
-    private final @NonNull EffectiveModelContext effectiveModel;
+    private @NonNull EffectiveModelContext effectiveModel;
     private final @NonNull DOMMountPointService mountPointService;
     private final @NonNull YangInstanceIdentifier instanceIdentifier;
     private final @NonNull DOMDataBroker domDataBroker;
@@ -130,6 +130,7 @@ public final class DeviceNotificationListenerAdaptor extends AbstractNotificatio
                         DOMSchemaService.class).orElseThrow(() ->
                         new RestconfDocumentedException("Mount point not available", ErrorType.APPLICATION,
                         ErrorTag.OPERATION_FAILED));
+        this.effectiveModel = domSchemaService.getGlobalContext();
         final Collection<? extends NotificationDefinition> notificationDefinitions = domSchemaService.getGlobalContext()
                 .getNotifications();
         final DOMNotificationService domNotificationService   = mountPoint.getService(DOMNotificationService.class)
