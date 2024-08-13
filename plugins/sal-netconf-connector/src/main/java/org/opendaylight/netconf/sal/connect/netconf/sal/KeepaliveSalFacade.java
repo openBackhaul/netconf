@@ -99,8 +99,9 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
      */
     private synchronized void stopKeepalives() {
         final var localTask = task;
+        LOG.info("{}: Stopping keepalive: localTask={}", id, localTask);
         if (localTask != null) {
-            localTask.disableKeepalive();
+            localTask.stopKeepalive();
             task = null;
         }
     }
@@ -130,7 +131,9 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
     public void onDeviceConnected(final NetconfDeviceSchema deviceSchema,
             final NetconfSessionPreferences sessionPreferences, final RemoteDeviceServices services) {
         final var devRpc = services.rpcs();
+        LOG.info("{}: onDeviceConnected old task={}", id, task);
         task = new KeepaliveTask(devRpc);
+        LOG.info("{}: onDeviceConnected new task={}", id, task);
 
         final Rpcs keepaliveRpcs;
         if (devRpc instanceof Rpcs.Normalized normalized) {
@@ -147,6 +150,7 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
         // We have performed a callback, which might have termined keepalives
         final var localTask = task;
+        LOG.info("{}: onDeviceConnected localTask={}", id, localTask);
         if (localTask != null) {
             LOG.debug("{}: Netconf session initiated, starting keepalives", id);
             LOG.info("{}: Scheduling keepalives every {}s", id, keepaliveDelaySeconds);
@@ -218,12 +222,18 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
         private volatile long lastActivity;
 
+        private volatile boolean stopped = false;
+
         KeepaliveTask(final Rpcs devRpc) {
             this.devRpc = requireNonNull(devRpc);
         }
 
         @Override
         public void run() {
+            if (stopped) {
+                LOG.info("{}: Keepalive will not run because it is stopped: this={} task={}", id, this, task);
+                return;
+            }
             final long local = lastActivity;
             final long now = System.nanoTime();
             final long inFutureNanos = local + delayNanos - now;
@@ -232,6 +242,10 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
             } else {
                 sendKeepalive(now);
             }
+        }
+
+        void stopKeepalive() {
+            stopped = true;
         }
 
         void recordActivity() {
@@ -291,7 +305,7 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
             } else {
                 final var errors = result.errors();
                 if (!errors.isEmpty()) {
-                    LOG.warn("{}: Keepalive RPC failed with error: {}", id, errors);
+                    LOG.warn("{}: Keepalive RPC failed with error: {} this={} task={}", id, errors, this, task);
                     reschedule();
                 } else {
                     LOG.warn("{} Keepalive RPC returned null with response. Reconnecting netconf session", id);
@@ -315,6 +329,11 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
         }
 
         private void reschedule(final long delay) {
+            if (stopped) {
+                LOG.info("{}: Keepalive will not be rescheduled because it is stopped: this={} task={}", id, this,
+                        task);
+                return;
+            }
             executor.schedule(this, delay, TimeUnit.NANOSECONDS);
         }
     }

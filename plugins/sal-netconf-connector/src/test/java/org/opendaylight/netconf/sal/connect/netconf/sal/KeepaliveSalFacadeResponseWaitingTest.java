@@ -102,7 +102,7 @@ public class KeepaliveSalFacadeResponseWaitingTest {
         verify(deviceRpc, times(1)).invokeRpc(null, null);
 
         // Verify the keepalive RPC invocation never happened because it was suppressed by sending of general RPC.
-        verify(deviceRpc, after(2500).never()).invokeRpc(GetConfig.QNAME,
+        verify(deviceRpc, after(2500).never()).invokeNetconf(GetConfig.QNAME,
                 KeepaliveSalFacade.KeepaliveTask.KEEPALIVE_PAYLOAD);
 
         // Verify there was only one KeepaliveTask scheduled (next KeepaliveTask would be scheduled if general RPC
