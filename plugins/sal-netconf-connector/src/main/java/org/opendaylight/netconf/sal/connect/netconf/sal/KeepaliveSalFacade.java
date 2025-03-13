@@ -100,7 +100,7 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
     private synchronized void stopKeepalives() {
         final var localTask = task;
         if (localTask != null) {
-            localTask.disableKeepalive();
+            localTask.stopKeepalive();
             task = null;
         }
     }
@@ -215,12 +215,28 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
         private volatile long lastActivity;
 
+        // explicit volatile field for stopping the task
+        // access to this field cannot be guarded by "this", because of possible deadlock situation:
+        // thread-1: executes invokeNetconf inside synchronized method KeepaliveTask.sendKeepalive
+        //     KeepaliveSalFacade$KeepaliveTask.sendKeepalive(KeepaliveSalFacade.java:290)
+        // thread-1: tries to acquire NetconfDeviceCommunicator.sessionLock
+        //     NetconfDeviceCommunicator.sendRequest(NetconfDeviceCommunicator.java:349)
+        // thread-2: acquired NetconfDeviceCommunicator.sessionLock in tearDown (called from onSessionDown)
+        //     NetconfDeviceCommunicator.tearDown(NetconfDeviceCommunicator.java:201)
+        // thread-2: tries to access synchronized method KeepaliveTask.disableKeepalive
+        //     KeepaliveSalFacade$KeepaliveTask.disableKeepalive(KeepaliveSalFacade.java:259)
+        private volatile boolean stopped = false;
+
         KeepaliveTask(final Rpcs devRpc) {
             this.devRpc = requireNonNull(devRpc);
         }
 
         @Override
         public void run() {
+            if (stopped) {
+                // keepalive task should not run
+                return;
+            }
             final long local = lastActivity;
             final long now = System.nanoTime();
             final long inFutureNanos = local + delayNanos - now;
@@ -233,6 +249,11 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
 
         void recordActivity() {
             lastActivity = System.nanoTime();
+        }
+
+
+        void stopKeepalive() {
+            stopped = true;
         }
 
         synchronized void disableKeepalive() {
@@ -312,6 +333,10 @@ public final class KeepaliveSalFacade implements RemoteDeviceHandler {
         }
 
         private void reschedule(final long delay) {
+            if (stopped) {
+                // previous keepalive task finished but next keepalive task should not run
+                return;
+            }
             executor.schedule(this, delay, TimeUnit.NANOSECONDS);
         }
     }
